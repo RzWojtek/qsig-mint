@@ -5,11 +5,10 @@ import Link from "next/link";
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL!;
 
 const CHAINS: Record<string, { name: string; chainId: number; gate: string }> = {
-  base:     { name: "Base",     chainId: 8453,   gate: process.env.NEXT_PUBLIC_GATE_BASE     || "" },
-  arbitrum: { name: "Arbitrum", chainId: 42161,  gate: process.env.NEXT_PUBLIC_GATE_ARBITRUM || "" },
-  optimism: { name: "Optimism", chainId: 10,     gate: process.env.NEXT_PUBLIC_GATE_OPTIMISM || "" },
+  base:     { name: "Base",     chainId: 8453,  gate: process.env.NEXT_PUBLIC_GATE_BASE     || "" },
+  arbitrum: { name: "Arbitrum", chainId: 42161, gate: process.env.NEXT_PUBLIC_GATE_ARBITRUM || "" },
   ink:      { name: "Ink",      chainId: 57073, gate: process.env.NEXT_PUBLIC_GATE_INK      || "" },
-  megaeth:  { name: "MegaETH",  chainId: 6342,   gate: process.env.NEXT_PUBLIC_GATE_MEGAETH  || "" },
+  megaeth:  { name: "MegaETH",  chainId: 4326,  gate: process.env.NEXT_PUBLIC_GATE_MEGAETH  || "" },
 };
 
 const GATE_ABI = [
@@ -19,7 +18,6 @@ const GATE_ABI = [
 const EXPLORERS: Record<string, string> = {
   base:     "https://basescan.org/tx/",
   arbitrum: "https://arbiscan.io/tx/",
-  optimism: "https://optimistic.etherscan.io/tx/",
   ink:      "https://explorer.inkonchain.com/tx/",
   megaeth:  "https://megaexplorer.xyz/tx/",
 };
@@ -212,10 +210,10 @@ export default function MintPage() {
 
         <div className="space-y-2 mb-8">
           {[
-            { n: 1, label: "generate SPHINCS- key",      done: ["sign","waiting","mint","done"].includes(step) },
+            { n: 1, label: "generate SPHINCS- key",          done: ["sign","waiting","mint","done"].includes(step) },
             { n: 2, label: "connect wallet + send signature", done: ["waiting","mint","done"].includes(step) },
-            { n: 3, label: "wait for Merkle root (~5 min)", done: ["mint","done"].includes(step), active: isWaiting },
-            { n: 4, label: "mint on-chain",               done: step === "done" },
+            { n: 3, label: "wait for Merkle root (~5 min)",   done: ["mint","done"].includes(step), active: isWaiting },
+            { n: 4, label: "mint on-chain",                   done: step === "done" },
           ].map(s => (
             <div key={s.n} className={`flex items-center gap-3 p-3 rounded-lg border text-sm transition-colors ${
               s.done
