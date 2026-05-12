@@ -258,11 +258,16 @@ export default function MintPage() {
               <div className="text-green-400 font-bold text-lg mb-2">✅ 500 QSIG minted!</div>
               {txHash && (
                 <a href={`${EXPLORERS[chain]}${txHash}`} target="_blank"
-                  className="text-xs text-zinc-400 hover:text-white underline block mb-3">
+                  className="text-xs text-zinc-400 hover:text-white underline block mb-2">
                   → View transaction on explorer ↗
                 </a>
               )}
-              <p className="text-zinc-600 text-xs">Come back tomorrow for another 500 QSIG</p>
+              <p className="text-zinc-600 text-xs mb-4">Come back tomorrow for another 500 QSIG</p>
+              <button
+                onClick={() => { setStep("idle"); setLogs([]); setError(""); setTxHash(""); setPk(""); setPkHash(""); setMerkle(null); }}
+                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs px-4 py-2 rounded-lg transition-colors border border-zinc-700">
+                → mint on another network
+              </button>
             </div>
           )}
           {step === "error" && (
