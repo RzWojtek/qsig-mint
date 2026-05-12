@@ -27,33 +27,32 @@ const EXPLORERS: Record<string, string> = {
 type Step = "idle" | "keygen" | "sign" | "waiting" | "mint" | "done" | "error";
 
 export default function MintPage() {
-  const [chain,   setChain]   = useState("base");
-  const [step,    setStep]    = useState<Step>("idle");
-  const [pk,      setPk]      = useState("");
-  const [pkHash,  setPkHash]  = useState("");
-  const [epoch,   setEpoch]   = useState(0);
-  const [merkle,  setMerkle]  = useState<{ proof: string[]; root: string } | null>(null);
-  const [txHash,  setTxHash]  = useState("");
-  const [error,   setError]   = useState("");
-  const [logs,    setLogs]    = useState<string[]>([]);
+  const [chain,  setChain]  = useState("base");
+  const [step,   setStep]   = useState<Step>("idle");
+  const [pk,     setPk]     = useState("");
+  const [pkHash, setPkHash] = useState("");
+  const [epoch,  setEpoch]  = useState(0);
+  const [merkle, setMerkle] = useState<{ proof: string[]; root: string } | null>(null);
+  const [txHash, setTxHash] = useState("");
+  const [error,  setError]  = useState("");
+  const [logs,   setLogs]   = useState<string[]>([]);
 
   function addLog(msg: string) {
     setLogs(prev => [...prev, `[${new Date().toISOString().slice(11, 19)}] ${msg}`]);
   }
 
-  // ── Krok 1: Generuj klucz SPHINCS- ────────────────────────────────────
   async function doKeygen() {
     setStep("keygen");
     setError("");
     setLogs([]);
-    addLog("Generuję klucz SPHINCS-...");
+    addLog("Generating SPHINCS- key...");
     try {
       const res  = await fetch(`${BACKEND}/api/keygen`, { method: "POST" });
       const data = await res.json();
-      if (!data.pk) throw new Error("Brak klucza w odpowiedzi backendu");
+      if (!data.pk) throw new Error("No key in backend response");
       setPk(data.pk);
       setPkHash(data.pk_hash);
-      addLog(`✓ Klucz gotowy. pk_hash: 0x${data.pk_hash.slice(0, 12)}...`);
+      addLog(`✓ Key ready. pk_hash: 0x${data.pk_hash.slice(0, 12)}...`);
       setStep("sign");
       await doSign(data.pk, data.pk_hash);
     } catch (e: unknown) {
@@ -62,11 +61,10 @@ export default function MintPage() {
     }
   }
 
-  // ── Krok 2: Połącz wallet i podpisz ────────────────────────────────────
   async function doSign(pkVal: string, pkHashVal: string) {
     setError("");
     try {
-      if (!window.ethereum) throw new Error("Zainstaluj MetaMask");
+      if (!window.ethereum) throw new Error("Please install MetaMask");
 
       const accounts = await window.ethereum.request({
         method: "eth_requestAccounts",
@@ -80,7 +78,7 @@ export default function MintPage() {
         params: [{ chainId: chainHex }],
       }).catch(() => {});
 
-      addLog(`Wysyłam podpis do backendu (sieć: ${chain})...`);
+      addLog(`Sending signature to backend (chain: ${chain})...`);
 
       const res  = await fetch(`${BACKEND}/api/sign`, {
         method: "POST",
@@ -88,11 +86,11 @@ export default function MintPage() {
         body: JSON.stringify({ pk: pkVal, sig: pkVal, recipient, chain }),
       });
       const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "Błąd backendu");
+      if (!data.ok) throw new Error(data.error || "Backend error");
 
       setEpoch(data.day_epoch);
-      addLog(`✓ Zaakceptowany! day_epoch: ${data.day_epoch}`);
-      addLog("Czekam na Merkle root (max ~5 min)...");
+      addLog(`✓ Accepted! day_epoch: ${data.day_epoch}`);
+      addLog("Waiting for Merkle root (max ~5 min)...");
       setStep("waiting");
 
       await pollForProof(pkHashVal, chain, data.day_epoch);
@@ -103,11 +101,10 @@ export default function MintPage() {
     }
   }
 
-  // ── Polling co 30s czy root jest gotowy ───────────────────────────────
   async function pollForProof(pkh: string, ch: string, ep: number) {
     for (let i = 0; i < 20; i++) {
       await new Promise(r => setTimeout(r, 30_000));
-      addLog(`Sprawdzam proof... (próba ${i + 1}/20)`);
+      addLog(`Checking proof... (attempt ${i + 1}/20)`);
       try {
         const res  = await fetch(
           `${BACKEND}/api/proof?pkHash=${pkh}&chain=${ch}&dayEpoch=${ep}`
@@ -116,23 +113,22 @@ export default function MintPage() {
           const data = await res.json();
           if (data.merkle?.proof) {
             setMerkle(data.merkle);
-            addLog("✓ Merkle proof gotowy! Możesz mintować.");
+            addLog("✓ Merkle proof ready! You can mint.");
             setStep("mint");
             return;
           }
         }
       } catch {}
     }
-    addLog("Timeout — spróbuj kliknąć 'mint now' mimo to.");
+    addLog("Timeout — try clicking 'mint now' anyway.");
     setStep("mint");
   }
 
-  // ── Krok 3: Mint on-chain z atestacją EIP-712 ─────────────────────────
   async function doMint() {
     setError("");
-    addLog("Pobieram atestację backendu...");
+    addLog("Fetching backend attestation...");
     try {
-      if (!window.ethereum) throw new Error("Zainstaluj MetaMask");
+      if (!window.ethereum) throw new Error("Please install MetaMask");
 
       const { ethers } = await import("ethers");
       const provider   = new ethers.BrowserProvider(window.ethereum);
@@ -140,7 +136,6 @@ export default function MintPage() {
       const network    = await provider.getNetwork();
       const recipient  = await signer_.getAddress();
 
-      // Pobierz atestację EIP-712 z backendu
       const attestRes = await fetch(`${BACKEND}/api/attest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -152,9 +147,9 @@ export default function MintPage() {
         }),
       });
       const attestData = await attestRes.json();
-      if (!attestData.ok) throw new Error(attestData.error || "Błąd atestacji");
+      if (!attestData.ok) throw new Error(attestData.error || "Attestation error");
 
-      addLog("✓ Atestacja OK. Wysyłam transakcję mint...");
+      addLog("✓ Attestation OK. Sending mint transaction...");
 
       const gate  = new ethers.Contract(CHAINS[chain].gate, GATE_ABI, signer_);
       const proof = (merkle?.proof || []) as string[];
@@ -170,7 +165,7 @@ export default function MintPage() {
       addLog(`TX: ${tx.hash.slice(0, 16)}...`);
       await tx.wait();
       setTxHash(tx.hash);
-      addLog("✅ 500 QSIG zmintowane!");
+      addLog("✅ 500 QSIG minted!");
       setStep("done");
 
     } catch (e: unknown) {
@@ -192,12 +187,11 @@ export default function MintPage() {
       <div className="max-w-lg mx-auto px-6 pt-16 pb-16">
         <h1 className="text-2xl font-bold mb-1">daily mint</h1>
         <p className="text-zinc-500 text-sm mb-8">
-          raz dziennie (UTC) · nowy klucz SPHINCS- · 500 QSIG za 0.0005 ETH
+          once daily (UTC) · new SPHINCS- key · 500 QSIG for 0.0005 ETH
         </p>
 
-        {/* Wybór sieci */}
         <div className="mb-6">
-          <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider">wybierz sieć</p>
+          <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider">select network</p>
           <div className="flex flex-wrap gap-2">
             {Object.entries(CHAINS).map(([key, val]) => (
               <button
@@ -216,13 +210,12 @@ export default function MintPage() {
           </div>
         </div>
 
-        {/* Kroki */}
         <div className="space-y-2 mb-8">
           {[
-            { n: 1, label: "generuj klucz SPHINCS-",        done: ["sign","waiting","mint","done"].includes(step) },
-            { n: 2, label: "połącz wallet + wyślij podpis",  done: ["waiting","mint","done"].includes(step) },
-            { n: 3, label: "czekaj na Merkle root (~5 min)", done: ["mint","done"].includes(step), active: isWaiting },
-            { n: 4, label: "mint on-chain",                  done: step === "done" },
+            { n: 1, label: "generate SPHINCS- key",      done: ["sign","waiting","mint","done"].includes(step) },
+            { n: 2, label: "connect wallet + send signature", done: ["waiting","mint","done"].includes(step) },
+            { n: 3, label: "wait for Merkle root (~5 min)", done: ["mint","done"].includes(step), active: isWaiting },
+            { n: 4, label: "mint on-chain",               done: step === "done" },
           ].map(s => (
             <div key={s.n} className={`flex items-center gap-3 p-3 rounded-lg border text-sm transition-colors ${
               s.done
@@ -244,7 +237,6 @@ export default function MintPage() {
           ))}
         </div>
 
-        {/* Akcja */}
         <div className="space-y-3">
           {step === "idle" && (
             <button onClick={doKeygen}
@@ -254,7 +246,7 @@ export default function MintPage() {
           )}
           {step === "waiting" && (
             <div className="text-center text-zinc-500 text-sm py-4">
-              ⏳ czekam na cron backendu... (co 5 minut postuje Merkle root)
+              ⏳ waiting for backend cron... (posts Merkle root every 5 minutes)
             </div>
           )}
           {step === "mint" && (
@@ -265,14 +257,14 @@ export default function MintPage() {
           )}
           {step === "done" && (
             <div className="border border-green-500/30 bg-green-500/5 rounded-lg p-5 text-center">
-              <div className="text-green-400 font-bold text-lg mb-2">✅ 500 QSIG zmintowane!</div>
+              <div className="text-green-400 font-bold text-lg mb-2">✅ 500 QSIG minted!</div>
               {txHash && (
                 <a href={`${EXPLORERS[chain]}${txHash}`} target="_blank"
                   className="text-xs text-zinc-400 hover:text-white underline block mb-3">
-                  → Zobacz transakcję na explorerze ↗
+                  → View transaction on explorer ↗
                 </a>
               )}
-              <p className="text-zinc-600 text-xs">Wróć jutro po kolejne 500 QSIG</p>
+              <p className="text-zinc-600 text-xs">Come back tomorrow for another 500 QSIG</p>
             </div>
           )}
           {step === "error" && (
@@ -281,13 +273,12 @@ export default function MintPage() {
               <button
                 onClick={() => { setStep("idle"); setLogs([]); setError(""); }}
                 className="text-xs text-zinc-500 hover:text-white underline">
-                zacznij od nowa
+                start over
               </button>
             </div>
           )}
         </div>
 
-        {/* Logi */}
         {logs.length > 0 && (
           <div className="mt-6 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-500 space-y-1 max-h-40 overflow-y-auto">
             {logs.map((l, i) => <div key={i}>{l}</div>)}
