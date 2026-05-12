@@ -8,7 +8,7 @@ const CHAINS: Record<string, { name: string; chainId: number; gate: string }> = 
   base:     { name: "Base",     chainId: 8453,   gate: process.env.NEXT_PUBLIC_GATE_BASE     || "" },
   arbitrum: { name: "Arbitrum", chainId: 42161,  gate: process.env.NEXT_PUBLIC_GATE_ARBITRUM || "" },
   optimism: { name: "Optimism", chainId: 10,     gate: process.env.NEXT_PUBLIC_GATE_OPTIMISM || "" },
-  ink:      { name: "Ink",      chainId: 763373, gate: process.env.NEXT_PUBLIC_GATE_INK      || "" },
+  ink:      { name: "Ink",      chainId: 57073, gate: process.env.NEXT_PUBLIC_GATE_INK      || "" },
   megaeth:  { name: "MegaETH",  chainId: 6342,   gate: process.env.NEXT_PUBLIC_GATE_MEGAETH  || "" },
 };
 
