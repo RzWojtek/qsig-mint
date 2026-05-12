@@ -2,8 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 
-// ── Konfiguracja — uzupełnij po deployu kontraktów ────────────────────────
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL!; // np. https://api.qsig.xyz
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL!;
 
 const CHAINS: Record<string, { name: string; chainId: number; gate: string }> = {
   base:     { name: "Base",     chainId: 8453,   gate: process.env.NEXT_PUBLIC_GATE_BASE     || "" },
@@ -27,7 +26,6 @@ const EXPLORERS: Record<string, string> = {
 
 type Step = "idle" | "keygen" | "sign" | "waiting" | "mint" | "done" | "error";
 
-// ── Komponent ──────────────────────────────────────────────────────────────
 export default function MintPage() {
   const [chain,   setChain]   = useState("base");
   const [step,    setStep]    = useState<Step>("idle");
@@ -57,6 +55,7 @@ export default function MintPage() {
       setPkHash(data.pk_hash);
       addLog(`✓ Klucz gotowy. pk_hash: 0x${data.pk_hash.slice(0, 12)}...`);
       setStep("sign");
+      await doSign(data.pk, data.pk_hash);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       setStep("error");
@@ -64,7 +63,7 @@ export default function MintPage() {
   }
 
   // ── Krok 2: Połącz wallet i podpisz ────────────────────────────────────
-  async function doSign() {
+  async function doSign(pkVal: string, pkHashVal: string) {
     setError("");
     try {
       if (!window.ethereum) throw new Error("Zainstaluj MetaMask");
@@ -75,7 +74,6 @@ export default function MintPage() {
       const recipient = accounts[0];
       addLog(`✓ Wallet: ${recipient.slice(0, 10)}...`);
 
-      // Przełącz sieć
       const chainHex = "0x" + CHAINS[chain].chainId.toString(16);
       await window.ethereum.request({
         method: "wallet_switchEthereumChain",
@@ -87,7 +85,7 @@ export default function MintPage() {
       const res  = await fetch(`${BACKEND}/api/sign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pk, sig: pk, recipient, chain }),
+        body: JSON.stringify({ pk: pkVal, sig: pkVal, recipient, chain }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Błąd backendu");
@@ -97,7 +95,7 @@ export default function MintPage() {
       addLog("Czekam na Merkle root (max ~5 min)...");
       setStep("waiting");
 
-      await pollForProof(pkHash, chain, data.day_epoch);
+      await pollForProof(pkHashVal, chain, data.day_epoch);
 
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -129,28 +127,47 @@ export default function MintPage() {
     setStep("mint");
   }
 
-  // ── Krok 3: Mint on-chain ──────────────────────────────────────────────
+  // ── Krok 3: Mint on-chain z atestacją EIP-712 ─────────────────────────
   async function doMint() {
     setError("");
-    addLog("Wysyłam transakcję mint...");
+    addLog("Pobieram atestację backendu...");
     try {
       if (!window.ethereum) throw new Error("Zainstaluj MetaMask");
 
       const { ethers } = await import("ethers");
       const provider   = new ethers.BrowserProvider(window.ethereum);
       const signer_    = await provider.getSigner();
-      const gate       = new ethers.Contract(CHAINS[chain].gate, GATE_ABI, signer_);
-      const proof      = (merkle?.proof || []) as string[];
+      const network    = await provider.getNetwork();
+      const recipient  = await signer_.getAddress();
+
+      // Pobierz atestację EIP-712 z backendu
+      const attestRes = await fetch(`${BACKEND}/api/attest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pkHash:   pkHash,
+          recipient,
+          dayEpoch: epoch,
+          chainId:  network.chainId.toString(),
+        }),
+      });
+      const attestData = await attestRes.json();
+      if (!attestData.ok) throw new Error(attestData.error || "Błąd atestacji");
+
+      addLog("✓ Atestacja OK. Wysyłam transakcję mint...");
+
+      const gate  = new ethers.Contract(CHAINS[chain].gate, GATE_ABI, signer_);
+      const proof = (merkle?.proof || []) as string[];
 
       const tx = await gate.mint(
         epoch,
         "0x" + pkHash,
         proof,
-        "0x00",
+        attestData.sig,
         { value: ethers.parseEther("0.0005") }
       );
 
-      addLog(`TX wysłana: ${tx.hash.slice(0, 16)}...`);
+      addLog(`TX: ${tx.hash.slice(0, 16)}...`);
       await tx.wait();
       setTxHash(tx.hash);
       addLog("✅ 500 QSIG zmintowane!");
@@ -162,10 +179,8 @@ export default function MintPage() {
     }
   }
 
-  const isDone    = (s: Step) => (["sign","waiting","mint","done"] as Step[]).includes(step) && step !== s;
   const isWaiting = step === "waiting";
 
-  // ── Render ─────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-black text-white font-mono">
       <nav className="border-b border-zinc-800 px-6 py-4 flex gap-6 text-sm items-center">
@@ -204,10 +219,10 @@ export default function MintPage() {
         {/* Kroki */}
         <div className="space-y-2 mb-8">
           {[
-            { n: 1, label: "generuj klucz SPHINCS-",       done: ["sign","waiting","mint","done"].includes(step) },
-            { n: 2, label: "połącz wallet + wyślij podpis", done: ["waiting","mint","done"].includes(step) },
+            { n: 1, label: "generuj klucz SPHINCS-",        done: ["sign","waiting","mint","done"].includes(step) },
+            { n: 2, label: "połącz wallet + wyślij podpis",  done: ["waiting","mint","done"].includes(step) },
             { n: 3, label: "czekaj na Merkle root (~5 min)", done: ["mint","done"].includes(step), active: isWaiting },
-            { n: 4, label: "mint on-chain",                 done: step === "done" },
+            { n: 4, label: "mint on-chain",                  done: step === "done" },
           ].map(s => (
             <div key={s.n} className={`flex items-center gap-3 p-3 rounded-lg border text-sm transition-colors ${
               s.done
@@ -217,8 +232,8 @@ export default function MintPage() {
                   : "border-zinc-800 text-zinc-400"
             }`}>
               <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 font-bold ${
-                s.done   ? "bg-zinc-800 text-zinc-500"
-                : s.active ? "bg-cyan-400 text-black animate-pulse"
+                s.done    ? "bg-zinc-800 text-zinc-500"
+                : s.active  ? "bg-cyan-400 text-black animate-pulse"
                 : "border border-zinc-700 text-zinc-600"
               }`}>
                 {s.done ? "✓" : s.n}
@@ -235,12 +250,6 @@ export default function MintPage() {
             <button onClick={doKeygen}
               className="w-full bg-cyan-400 text-black font-bold py-3 rounded-lg hover:bg-cyan-300 transition-colors">
               generate key
-            </button>
-          )}
-          {step === "sign" && (
-            <button onClick={doSign}
-              className="w-full bg-cyan-400 text-black font-bold py-3 rounded-lg hover:bg-cyan-300 transition-colors">
-              connect wallet + sign
             </button>
           )}
           {step === "waiting" && (
@@ -289,7 +298,6 @@ export default function MintPage() {
   );
 }
 
-// TypeScript — dodaj typ dla window.ethereum
 declare global {
   interface Window {
     ethereum?: {
