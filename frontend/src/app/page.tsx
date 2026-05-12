@@ -2,50 +2,27 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-// Adres tokenu QSIG na Base
-const QSIG_TOKEN_ADDRESS = "0xE6417fDB0FBB671deaced0C4209C8087f435EcAf";
-const BASE_RPC = "https://base.llamarpc.com"; // publiczny darmowy RPC, nie wymaga klucza
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL!;
 
-// totalSupply() — selector 0x18160ddd
-async function fetchTotalMinted(): Promise<number> {
-  const response = await fetch(BASE_RPC, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      method: "eth_call",
-      params: [
-        { to: QSIG_TOKEN_ADDRESS, data: "0x18160ddd" },
-        "latest",
-      ],
-      id: 1,
-    }),
-  });
-  const data = await response.json();
-  // wynik w wei (18 decimals) — dzielimy przez 1e18
-  const raw = BigInt(data.result);
-  const total = Number(raw / BigInt("1000000000000000000"));
-  // Odejmujemy 10M LP + 1M burn = 11M które były mintowane przy deployu
-  // Pokazujemy tylko publiczne minty
-  return Math.max(0, total - 11_000_000);
+interface Supply {
+  public_minted: number;
+  slots_used:    number;
+  pct:           string;
+  remaining:     number;
 }
 
-const MAX_PUBLIC_SUPPLY = 10_000_000; // 20,000 slotów × 500 QSIG
-const HARD_CAP          = 21_000_000;
-
 export default function Home() {
-  const [minted,  setMinted]  = useState<number | null>(null);
+  const [supply,  setSupply]  = useState<Supply | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchTotalMinted()
-      .then(v => { setMinted(v); setLoading(false); })
+    fetch(`${BACKEND}/api/supply`)
+      .then(r => r.json())
+      .then(d => { if (d.ok) setSupply(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 
-  const pct     = minted !== null ? Math.min(100, (minted / MAX_PUBLIC_SUPPLY) * 100) : 0;
-  const slots   = minted !== null ? Math.floor(minted / 500) : null;
-  const remaining = minted !== null ? MAX_PUBLIC_SUPPLY - minted : null;
+  const pct = supply ? parseFloat(supply.pct) : 0;
 
   return (
     <main className="min-h-screen bg-black text-white font-mono">
@@ -70,7 +47,7 @@ export default function Home() {
           Shor&apos;s algorithm can&apos;t touch us.
         </p>
 
-        {/* ── Licznik Total Minted ─────────────────────────────── */}
+        {/* ── Total Minted Counter ─────────────────────────────── */}
         <div className="border border-zinc-800 rounded-xl p-5 mb-8 bg-zinc-900/30">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-zinc-500 uppercase tracking-wider">
@@ -80,50 +57,55 @@ export default function Home() {
               <span className="text-xs text-zinc-600 animate-pulse">loading...</span>
             ) : (
               <span className="text-xs text-zinc-400">
-                {slots !== null ? slots.toLocaleString() : "—"} mints
+                {supply ? supply.slots_used.toLocaleString() : "—"} mints
               </span>
             )}
           </div>
 
-          {/* Pasek postępu */}
-          <div className="w-full bg-zinc-800 rounded-full h-2 mb-3 overflow-hidden">
-            <div
-              className="h-2 rounded-full transition-all duration-1000"
-              style={{
-                width: `${pct}%`,
-                background: pct > 80
-                  ? "linear-gradient(90deg, #00e5ff, #ff4d4d)"
-                  : "linear-gradient(90deg, #00e5ff, #0080ff)",
-              }}
-            />
+          {/* Progress bar */}
+          <div className="w-full bg-zinc-800 rounded-full h-2 mb-4 overflow-hidden">
+            {!loading && (
+              <div
+                className="h-2 rounded-full transition-all duration-1000"
+                style={{
+                  width: `${Math.max(pct, pct > 0 ? 0.5 : 0)}%`,
+                  background: pct > 80
+                    ? "linear-gradient(90deg, #00e5ff, #ff4d4d)"
+                    : "linear-gradient(90deg, #00e5ff, #0080ff)",
+                }}
+              />
+            )}
+            {loading && (
+              <div className="h-2 rounded-full bg-zinc-700 animate-pulse w-full" />
+            )}
           </div>
 
-          {/* Liczby */}
+          {/* Numbers */}
           <div className="flex items-end justify-between">
             <div>
               {loading ? (
                 <div className="text-2xl font-bold text-zinc-600 animate-pulse">———</div>
               ) : (
                 <div className="text-2xl font-bold text-white">
-                  {minted !== null ? minted.toLocaleString() : "—"}
+                  {supply ? supply.public_minted.toLocaleString() : "0"}
                   <span className="text-sm text-zinc-500 font-normal ml-2">QSIG minted</span>
                 </div>
               )}
               <div className="text-xs text-zinc-600 mt-1">
-                out of {MAX_PUBLIC_SUPPLY.toLocaleString()} public supply
+                out of 10,000,000 public supply
               </div>
             </div>
             <div className="text-right">
               <div className="text-lg font-bold text-cyan-400">
-                {pct.toFixed(2)}%
+                {loading ? "—" : `${pct.toFixed(3)}%`}
               </div>
               <div className="text-xs text-zinc-600">
-                {remaining !== null ? remaining.toLocaleString() : "—"} remaining
+                {supply ? supply.remaining.toLocaleString() : "—"} remaining
               </div>
             </div>
           </div>
         </div>
-        {/* ── Koniec licznika ──────────────────────────────────── */}
+        {/* ── End Counter ──────────────────────────────────────── */}
 
         {/* Stats grid */}
         <div className="grid grid-cols-2 gap-3 mb-10 text-sm">
