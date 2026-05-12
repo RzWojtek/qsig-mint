@@ -17,20 +17,21 @@ export default function Home() {
         </h1>
 
         <p className="text-zinc-400 text-lg mb-10 leading-relaxed">
-          Pierwszy daily-mint token bramkowany prawdziwym podpisem{" "}
-          <span className="text-white font-bold">SPHINCS−</span> odpornym
-          na komputery kwantowe. Generuj nowy klucz każdego dnia,
-          podpisz raz, wymintuj <span className="text-white font-bold">500 $QSIG</span>.
+          The first daily-mint token gated by a real{" "}
+          <span className="text-white font-bold">SPHINCS−</span> post-quantum
+          signature. Generate a fresh key every day, sign once, mint{" "}
+          <span className="text-white font-bold">500 $QSIG</span>.
+          Shor&apos;s algorithm can&apos;t touch us.
         </p>
 
         <div className="grid grid-cols-2 gap-3 mb-10 text-sm">
           {[
             ["token",        "QSIG (Quantum Signature)"],
-            ["sieci",        "Base · Arb · OP · Ink · Mega"],
-            ["cena mint",    "0.0005 ETH (~$1.5)"],
-            ["tokeny/mint",  "500 QSIG"],
+            ["networks",     "Base · Arb · OP · Ink · Mega"],
+            ["mint price",   "0.0005 ETH (~$1.5)"],
+            ["tokens/mint",  "500 QSIG"],
             ["hard cap",     "21,000,000 QSIG"],
-            ["max slotów",   "20,000 per sieć"],
+            ["max slots",    "20,000 per network"],
           ].map(([k, v]) => (
             <div key={k} className="border border-zinc-800 rounded-lg p-3">
               <div className="text-zinc-500 text-xs mb-1">{k}</div>
@@ -46,12 +47,12 @@ export default function Home() {
           </Link>
           <Link href="/faq"
             className="border border-zinc-700 text-zinc-300 px-8 py-3 rounded-lg hover:border-zinc-500 hover:text-white transition-colors">
-            jak to działa
+            how it works
           </Link>
         </div>
 
         <p className="text-zinc-700 text-xs mt-8">
-          Kontrakt immutable · open-source · zweryfikowany on-chain · brak admina
+          Immutable contract · open-source · verified on-chain · no admin
         </p>
       </div>
     </main>
